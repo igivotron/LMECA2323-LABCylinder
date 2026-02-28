@@ -8,17 +8,19 @@ import scipy as sp
 
 ambiant_p = np.load("CylindersWake-20260225/ambient_p.npy")
 ambiant_T = np.load("CylindersWake-20260225/ambient_T.npy")
-inflow_delta_p = pd.read_csv("CylindersWake-20260225/inflow_delta_p.CSV")
+inflow_delta_p = pd.read_csv("CylindersWake-20260225/inflow_delta_p.CSV", header=None)
 inflow_delta_p = inflow_delta_p.iloc[:, 2].values
 profile_pinf_p_bar = np.load("CylindersWake-20260225/profile_pinf_p_bar.npy")
 profile_U_bar = np.load("CylindersWake-20260225/profile_U_bar.npy")
 profile_U_p2_bar = np.load("CylindersWake-20260225/profile_U_p2_bar.npy")
 profile_y = np.load("CylindersWake-20260225/profile_y.npy")
-strain_calibration = pd.read_csv('data/strain_calibration.csv', delimiter=';')
-mutlimeter = pd.read_csv('data/multimeter.csv', delimiter=';')
+strain_calibration = pd.read_csv('data/strain_calibration.csv', delimiter=';', header=0)
+mutlimeter = pd.read_csv('data/multimeter.csv', delimiter=';', header=None)
+strainTension = mutlimeter.iloc[:, 0].values
 
 R = 287.05
 D = 50e-3
+b = 425e-3
 g = 9.81
 
 """
@@ -38,11 +40,6 @@ def get_pressure(pressures):
 
     error = np.sqrt(error_device**2 + error_reading**2 + error_random**2)
     return p_mean, error
-
-def interpolate_pressure(datas):
-    x_inter = np.linspace(0, 31, 100).reshape(-1, 1)
-    y_inter = sp.interpolate.interp1d(x, y, kind='cubic')(x_inter)
-    return x_inter, y_inter
 
 def get_rho():
     error_device = 4
@@ -85,21 +82,39 @@ def strain_interpolation_coefs():
     return coeffs
 
 def tension_to_force(tension):
-    a, b = strain_interpolation_coefs()
-    return (tension - b) / a
+    tension_mean = np.mean(tension)
+    tension_std = np.std(tension)
+    N = len(tension)
+    z = 1.96
 
-### Mise en forme des données
-N = 0
+    error_random = z * tension_std / np.sqrt(N)
+    error_reading = 0.01 /2 
+
+    a, b = strain_interpolation_coefs()
+    force = (tension_mean - b) / a
+    error_force = np.sqrt((error_random / a)**2 + (error_reading / a)**2) # Plus l'erreur de la calibration, mais on suppose que c'est négligeable
+    return force, error_force
+
+def get_Cd(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
+    Cd = DragForce / (0.5 * rho * U**2 * D * b)
+    error_Cd = Cd * np.sqrt((error_rho / rho)**2 + (2 * error_U / U)**2 + (DragForce_error / DragForce)**2)
+    return Cd, error_Cd
+
+"""
+Mise en forme des données
+p[0], p_err[0] : inflow avant le cylindre
+1 à 4: Différence de pression autour du point de stagnation (-10, -5, 5, 10)°
+"""
 datas = []
 for i in range(1, 33):
-    data = pd.read_csv(f'data/data{i}.csv')
+    data = pd.read_csv(f'data/data{i}.csv', header=None)
     pressures = data.iloc[:, 2].values
     p_mean, error = get_pressure(pressures)
     datas.append((p_mean, error))
-
 datas = np.array(datas)
 p = datas[:, 0]
 p_err = datas[:, 1]
+
 
 ### Conditions ambiantes
 rho, error_rho = get_rho()
@@ -107,13 +122,16 @@ freestream_pressure, freestram_pressure_error = p[0], p_err[0]
 freestream_velocity, freestream_velocity_error = get_freestream_velocity(freestream_pressure, freestram_pressure_error, rho, error_rho)
 mu, error_mu = get_kinematic_viscosity(ambiant_T)
 ReD, error_ReD = get_ReD(freestream_velocity, freestream_velocity_error, D, mu, error_mu, rho, error_rho)
-strainTension = (mutlimeter.iloc[:, 0].values).mean()
-DragForce_measured = tension_to_force(strainTension)
+DragForce, DragForce_error = tension_to_force(strainTension)
+Cd, Cd_error = get_Cd(DragForce, DragForce_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
 
-print(f"Rho : {rho:.2f} ± {error_rho:.2f} kg/m³")
-print(f"Freestream Pressure : {freestream_pressure:.2f} ± {freestram_pressure_error:.2f} Pa")
-print(f"Freestream Velocity : {freestream_velocity:.2f} ± {freestream_velocity_error:.2f} m/s")
-print(f"Kinematic Viscosity : {mu:.2e} ± {error_mu:.2e} m²/s")
-print(f"Reynolds Number : {ReD:.2e} ± {error_ReD:.2e}")
-print(f"strain tension : {strainTension:.2f} V")
-print(f"Drag Force measured : {DragForce_measured:.2f} N")
+
+
+# Affichage des résultats
+print(f"Rho : {rho:.6f} ± {error_rho:.6f} kg/m³")
+print(f"Freestream Pressure : {freestream_pressure:.6f} ± {freestram_pressure_error:.6f} Pa")
+print(f"Freestream Velocity : {freestream_velocity:.6f} ± {freestream_velocity_error:.6f} m/s")
+print(f"Kinematic Viscosity : {mu:.6e} ± {error_mu:.6e} m²/s")
+print(f"Reynolds Number : {ReD:.6e} ± {error_ReD:.6e}")
+print(f"Drag Force : {DragForce:.6f} ± {DragForce_error:.6f} N")
+print(f"Drag Coefficient : {Cd:.6f} ± {Cd_error:.6f}")
