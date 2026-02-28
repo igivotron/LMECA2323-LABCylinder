@@ -15,10 +15,11 @@ profile_U_bar = np.load("CylindersWake-20260225/profile_U_bar.npy")
 profile_U_p2_bar = np.load("CylindersWake-20260225/profile_U_p2_bar.npy")
 profile_y = np.load("CylindersWake-20260225/profile_y.npy")
 strain_calibration = pd.read_csv('data/strain_calibration.csv', delimiter=';')
-
+mutlimeter = pd.read_csv('data/multimeter.csv', delimiter=';')
 
 R = 287.05
 D = 50e-3
+g = 9.81
 
 """
 profile_pinf_p_bar: Profile de pression en fonction de y derrière le cylindre
@@ -72,11 +73,20 @@ def get_ReD(U, error_U, D, mu, error_mu, rho, error_rho):
     ReD_error = ReD * np.sqrt((error_rho / rho)**2 + (error_U / U)**2 + (error_mu / mu)**2)
     return ReD, ReD_error
 
-def strain():
+def strain_interpolation_coefs():
+    """
+    On interpole la calibration de la jauge de contrainte pour trouver les coefficients 
+    d'une relation linéaire entre la tension et le poids.
+    """
     mass = strain_calibration['mass'].values
     tension = strain_calibration['tension'].values
-    coeffs = np.polyfit(mass, tension, 1)
+    weight = mass * g
+    coeffs = np.polyfit(weight, tension, 1) 
     return coeffs
+
+def tension_to_force(tension):
+    a, b = strain_interpolation_coefs()
+    return (tension - b) / a
 
 ### Mise en forme des données
 N = 0
@@ -97,24 +107,13 @@ freestream_pressure, freestram_pressure_error = p[0], p_err[0]
 freestream_velocity, freestream_velocity_error = get_freestream_velocity(freestream_pressure, freestram_pressure_error, rho, error_rho)
 mu, error_mu = get_kinematic_viscosity(ambiant_T)
 ReD, error_ReD = get_ReD(freestream_velocity, freestream_velocity_error, D, mu, error_mu, rho, error_rho)
+strainTension = (mutlimeter.iloc[:, 0].values).mean()
+DragForce_measured = tension_to_force(strainTension)
 
 print(f"Rho : {rho:.2f} ± {error_rho:.2f} kg/m³")
 print(f"Freestream Pressure : {freestream_pressure:.2f} ± {freestram_pressure_error:.2f} Pa")
 print(f"Freestream Velocity : {freestream_velocity:.2f} ± {freestream_velocity_error:.2f} m/s")
 print(f"Kinematic Viscosity : {mu:.2e} ± {error_mu:.2e} m²/s")
 print(f"Reynolds Number : {ReD:.2e} ± {error_ReD:.2e}")
-
-
-### Strain calibration
-coeffs = strain()
-
-plt.plot(strain_calibration['mass'], strain_calibration['tension'], 'o', label='Data')
-plt.plot(strain_calibration['mass'], np.polyval(coeffs, strain_calibration['mass']), label='Fit')
-
-
-plt.xlabel('Mass (kg)')
-plt.ylabel('Tension (N)')
-plt.title('Strain Gauge Calibration')
-plt.legend()
-plt.grid()
-plt.show()
+print(f"strain tension : {strainTension:.2f} V")
+print(f"Drag Force measured : {DragForce_measured:.2f} N")
