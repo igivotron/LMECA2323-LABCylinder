@@ -100,10 +100,31 @@ def get_Cd(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
     error_Cd = Cd * np.sqrt((error_rho / rho)**2 + (2 * error_U / U)**2 + (DragForce_error / DragForce)**2)
     return Cd, error_Cd
 
+
+def get_Cp_theta(p, error_p, rho, rho_error, U, U_error):
+    Cptheta = p / (0.5 * rho * U**2)
+    error_Cptheta = Cptheta * np.sqrt((error_p / p)**2 + (rho_error / rho)**2 + (2 * U_error / U)**2)
+    return Cptheta, error_Cptheta
+
+
+def get_D(rho, U_inf, U, up2, p, y):
+
+    ym = y * 1e-3
+    Y = ym / D
+
+    term1 = (U/U_inf) * (1 - (U/U_inf))
+    term2 = (up2 / U_inf**2)
+    term3 = (p / (rho * U_inf**2))
+
+    integrand = term1 - term2 + term3
+
+    integral = np.trapezoid(integrand, Y)
+
+    return rho * U_inf**2 * D * integral
+
 """
 Mise en forme des données
 p[0], p_err[0] : inflow avant le cylindre
-1 à 4: Différence de pression autour du point de stagnation (-10, -5, 5, 10)°
 """
 datas = []
 for i in range(1, 33):
@@ -114,7 +135,7 @@ for i in range(1, 33):
 datas = np.array(datas)
 p = datas[:, 0]
 p_err = datas[:, 1]
-
+N = len(p)
 
 ### Conditions ambiantes
 rho, error_rho = get_rho()
@@ -124,6 +145,31 @@ mu, error_mu = get_kinematic_viscosity(ambiant_T)
 ReD, error_ReD = get_ReD(freestream_velocity, freestream_velocity_error, D, mu, error_mu, rho, error_rho)
 DragForce, DragForce_error = tension_to_force(strainTension)
 Cd, Cd_error = get_Cd(DragForce, DragForce_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
+
+### Mesure stagnation point
+
+# TODO: Il y a une double mesure quelque part, il faudrait vérifier laquelle est la bonne et supprimer l'autre
+angles1 = np.arange(-10, 95, 5)
+angles2 = np.arange(90, 190, 10)
+angles = np.concatenate((angles1, angles2))
+
+Cp = []
+Cp_error = []
+
+for i in range(1, N):
+    p_i, error_p_i = p[i], p_err[i]
+    Cp_i, error_Cp_i = get_Cp_theta(p_i, error_p_i, rho, error_rho, freestream_velocity, freestream_velocity_error)
+    Cp.append(Cp_i)
+    Cp_error.append(error_Cp_i)
+
+# plt.plot(angles, Cp, label='Cp')
+# plt.show()
+
+
+### Additional Analysis
+Drag = get_D(rho, freestream_velocity, profile_U_bar, profile_U_p2_bar, profile_pinf_p_bar, profile_y)
+Cd_additional = Drag / (0.5 * rho * freestream_velocity**2 * D)
+
 
 
 
@@ -135,3 +181,4 @@ print(f"Kinematic Viscosity : {mu:.6e} ± {error_mu:.6e} m²/s")
 print(f"Reynolds Number : {ReD:.6e} ± {error_ReD:.6e}")
 print(f"Drag Force : {DragForce:.6f} ± {DragForce_error:.6f} N")
 print(f"Drag Coefficient : {Cd:.6f} ± {Cd_error:.6f}")
+print(f"Cd from additional analysis: {Cd_additional:.6f}")
