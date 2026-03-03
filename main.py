@@ -122,6 +122,29 @@ def get_D(rho, U_inf, U, up2, p, y):
 
     return rho * U_inf**2 * D * integral
 
+def interpolate_Cp(coefs, angles):
+    a = coefs[0]
+    b = coefs[1]
+    c = coefs[2]
+    p_inter = a * angles**2 + b * angles + c
+    return get_Cp_theta(p_inter, 0, rho, 0, freestream_velocity, 0)[0]
+
+def get_p_interpolation_coefficients(angles, p):
+    a, b, c = np.polyfit(angles[0:5], p[1:6], 2)
+    return [a, b, c]
+
+def get_max_pressure_angle(coeffs):
+    a, b, c = coeffs
+    return -b / (2 * a)
+
+
+def integral_cptheta(angles, Cp):
+    angles_rad = np.radians(angles)
+    return np.trapezoid(Cp * np.cos(angles_rad), angles_rad)
+
+def get_Cp_potential_flow(theta):
+    return 1 - 4 * np.sin(np.radians(theta))**2
+
 """
 Mise en forme des données
 p[0], p_err[0] : inflow avant le cylindre
@@ -135,6 +158,9 @@ for i in range(1, 33):
 datas = np.array(datas)
 p = datas[:, 0]
 p_err = datas[:, 1]
+# Suppression de la double mesure
+p = np.concatenate((p[0:26], p[27:]))
+p_err = np.concatenate((p_err[0:26], p_err[27:]))
 N = len(p)
 
 ### Conditions ambiantes
@@ -147,30 +173,47 @@ DragForce, DragForce_error = tension_to_force(strainTension)
 Cd, Cd_error = get_Cd(DragForce, DragForce_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
 
 ### Mesure stagnation point
-
-# TODO: Il y a une double mesure quelque part, il faudrait vérifier laquelle est la bonne et supprimer l'autre
-angles1 = np.arange(-10, 95, 5)
+angles1 = np.arange(-10, 90, 5)
 angles2 = np.arange(90, 190, 10)
 angles = np.concatenate((angles1, angles2))
 
 Cp = []
 Cp_error = []
-
 for i in range(1, N):
     p_i, error_p_i = p[i], p_err[i]
     Cp_i, error_Cp_i = get_Cp_theta(p_i, error_p_i, rho, error_rho, freestream_velocity, freestream_velocity_error)
     Cp.append(Cp_i)
     Cp_error.append(error_Cp_i)
 
-# plt.plot(angles, Cp, label='Cp')
-# plt.show()
+# interpolation du Cp pour trouver le point de stagnation
+coefs = get_p_interpolation_coefficients(angles, p)
+angles_inter = np.linspace(-10, 10, 100)
+Cp_inter = interpolate_Cp(coefs, angles_inter)
+stagnation_angle = get_max_pressure_angle(coefs)
+Cp_total = integral_cptheta(angles, Cp)
+
+angles_potential_flow = np.linspace(0, 90, 100)
+Cp_potential_flow = get_Cp_potential_flow(angles_potential_flow)
+angles_potential_flow += stagnation_angle
+
+plt.plot(angles, Cp, 'o', label='Data points')
+plt.plot(angles_inter, Cp_inter, label='Interpolation')
+plt.plot(angles_potential_flow, Cp_potential_flow, label='Potential Flow')
+plt.axvline(stagnation_angle, color='g', linestyle='--', label=f'Stagnation Point at {stagnation_angle:.2f}°')
+
+plt.axhline(1, color='r', linestyle='--', label='Cp = 1')
+plt.xlabel('Angle (degrees)')
+plt.ylabel('Cp')
+plt.title('Cp vs Angle with Interpolation')
+plt.legend()
+plt.grid()
+plt.show()
+
 
 
 ### Additional Analysis
 Drag = get_D(rho, freestream_velocity, profile_U_bar, profile_U_p2_bar, profile_pinf_p_bar, profile_y)
 Cd_additional = Drag / (0.5 * rho * freestream_velocity**2 * D)
-
-
 
 
 # Affichage des résultats
@@ -182,3 +225,5 @@ print(f"Reynolds Number : {ReD:.6e} ± {error_ReD:.6e}")
 print(f"Drag Force : {DragForce:.6f} ± {DragForce_error:.6f} N")
 print(f"Drag Coefficient : {Cd:.6f} ± {Cd_error:.6f}")
 print(f"Cd from additional analysis: {Cd_additional:.6f}")
+print(f"Stagnation Point Angle : {stagnation_angle:.2f}°")
+print(f"Pressure Coefficient (Cp theta) Integral : {Cp_total:.6f}")
