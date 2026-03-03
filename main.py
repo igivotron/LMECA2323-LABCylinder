@@ -95,7 +95,7 @@ def tension_to_force(tension):
     error_force = np.sqrt((error_random / a)**2 + (error_reading / a)**2) # Plus l'erreur de la calibration, mais on suppose que c'est négligeable
     return force, error_force
 
-def get_Cd(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
+def get_Cd_straingauge(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
     Cd = DragForce / (0.5 * rho * U**2 * D * b)
     error_Cd = Cd * np.sqrt((error_rho / rho)**2 + (2 * error_U / U)**2 + (DragForce_error / DragForce)**2)
     return Cd, error_Cd
@@ -104,10 +104,10 @@ def get_Cd(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
 def get_Cp_theta(p, error_p, rho, rho_error, U, U_error):
     Cptheta = p / (0.5 * rho * U**2)
     error_Cptheta = Cptheta * np.sqrt((error_p / p)**2 + (rho_error / rho)**2 + (2 * U_error / U)**2)
-    return Cptheta, error_Cptheta
 
+    return Cptheta, np.abs(error_Cptheta)
 
-def get_D(rho, U_inf, U, up2, p, y):
+def get_D_add(rho, U_inf, U, up2, p, y):
 
     ym = y * 1e-3
     Y = ym / D
@@ -137,13 +137,41 @@ def get_max_pressure_angle(coeffs):
     a, b, c = coeffs
     return -b / (2 * a)
 
-
 def integral_cptheta(angles, Cp):
     angles_rad = np.radians(angles)
     return np.trapezoid(Cp * np.cos(angles_rad), angles_rad)
 
 def get_Cp_potential_flow(theta):
     return 1 - 4 * np.sin(np.radians(theta))**2
+
+
+def clip_additional_data(U_inf, treshold_U=0.1, treshold_p=0.1):
+    """
+    On cut les données si U_inf est proche de U_bar et que profile_pinf_p_bar est proche de 0
+    """
+    index = np.where((np.abs(profile_U_bar - U_inf) < treshold_U) & (np.abs(profile_pinf_p_bar) < treshold_p))[0]
+    low_bound = index[0]
+    upper_bound = index[1]
+    # for i in index: plt.axvline(profile_y[i], color='r', linestyle='--', label=f'Clipping at y={profile_y[i]:.2f} mm')
+
+    mask = (profile_y >= profile_y[low_bound]) & (profile_y <= profile_y[upper_bound])
+    y = profile_y[mask]
+    U = profile_U_bar[mask]
+    up2 = profile_U_p2_bar[mask]
+    p = profile_pinf_p_bar[mask]
+
+
+    # plt.plot(y, U, label='U')
+    # plt.plot(y, up2, label='U_p2')
+    # plt.plot(y, p, label='p_inf_p')
+    # plt.xlabel('y (mm)')
+    # plt.ylabel('Values')
+    # plt.title('Profiles after clipping')
+    # plt.legend()
+    # plt.grid()
+    # plt.show()
+
+    return U, up2, p, y
 
 """
 Mise en forme des données
@@ -169,8 +197,8 @@ freestream_pressure, freestram_pressure_error = p[0], p_err[0]
 freestream_velocity, freestream_velocity_error = get_freestream_velocity(freestream_pressure, freestram_pressure_error, rho, error_rho)
 mu, error_mu = get_kinematic_viscosity(ambiant_T)
 ReD, error_ReD = get_ReD(freestream_velocity, freestream_velocity_error, D, mu, error_mu, rho, error_rho)
-DragForce, DragForce_error = tension_to_force(strainTension)
-Cd, Cd_error = get_Cd(DragForce, DragForce_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
+DragForce_straingauge, DragForce_straingauge_error = tension_to_force(strainTension)
+Cd_straingauge, Cd_straingauge_error = get_Cd_straingauge(DragForce_straingauge, DragForce_straingauge_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
 
 ### Mesure stagnation point
 angles1 = np.arange(-10, 90, 5)
@@ -196,24 +224,26 @@ angles_potential_flow = np.linspace(0, 90, 100)
 Cp_potential_flow = get_Cp_potential_flow(angles_potential_flow)
 angles_potential_flow += stagnation_angle
 
-plt.plot(angles, Cp, 'o', label='Data points')
-plt.plot(angles_inter, Cp_inter, label='Interpolation')
-plt.plot(angles_potential_flow, Cp_potential_flow, label='Potential Flow')
-plt.axvline(stagnation_angle, color='g', linestyle='--', label=f'Stagnation Point at {stagnation_angle:.2f}°')
+# plt.errorbar(angles, Cp, yerr=Cp_error, fmt='o', label='Data with error bars')
+# plt.plot(angles_inter, Cp_inter, label='Interpolation')
+# plt.plot(angles_potential_flow, Cp_potential_flow, label='Potential Flow')
+# plt.axvline(stagnation_angle, color='g', linestyle='--', label=f'Stagnation Point at {stagnation_angle:.2f}°')
 
-plt.axhline(1, color='r', linestyle='--', label='Cp = 1')
-plt.xlabel('Angle (degrees)')
-plt.ylabel('Cp')
-plt.title('Cp vs Angle with Interpolation')
-plt.legend()
-plt.grid()
-plt.show()
+# # plt.axhline(1, color='r', linestyle='--', label='Cp = 1')
+# plt.xlabel('Angle (degrees)')
+# plt.ylabel('Cp')
+# plt.title('Cp vs Angle with Interpolation')
+# plt.legend()
+# plt.grid()
+# plt.show()
 
 
 
 ### Additional Analysis
-Drag = get_D(rho, freestream_velocity, profile_U_bar, profile_U_p2_bar, profile_pinf_p_bar, profile_y)
-Cd_additional = Drag / (0.5 * rho * freestream_velocity**2 * D)
+U, up2, p, y = clip_additional_data(freestream_velocity)
+Drag_add = get_D_add(rho, freestream_velocity, U, up2, p, y)
+Cd_additional = Drag_add / (0.5 * rho * freestream_velocity**2 * D)
+
 
 
 # Affichage des résultats
@@ -222,8 +252,8 @@ print(f"Freestream Pressure : {freestream_pressure:.6f} ± {freestram_pressure_e
 print(f"Freestream Velocity : {freestream_velocity:.6f} ± {freestream_velocity_error:.6f} m/s")
 print(f"Kinematic Viscosity : {mu:.6e} ± {error_mu:.6e} m²/s")
 print(f"Reynolds Number : {ReD:.6e} ± {error_ReD:.6e}")
-print(f"Drag Force : {DragForce:.6f} ± {DragForce_error:.6f} N")
-print(f"Drag Coefficient : {Cd:.6f} ± {Cd_error:.6f}")
+print(f"Drag Force from the Strain gauge: {DragForce_straingauge:.6f} ± {DragForce_straingauge_error:.6f} N")
+print(f"Drag Coefficient from the strain gauge: {Cd_straingauge:.6f} ± {Cd_straingauge_error:.6f}")
 print(f"Cd from additional analysis: {Cd_additional:.6f}")
 print(f"Stagnation Point Angle : {stagnation_angle:.2f}°")
 print(f"Pressure Coefficient (Cp theta) Integral : {Cp_total:.6f}")
