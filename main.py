@@ -161,15 +161,16 @@ def clip_additional_data(U_inf, treshold_U=0.1, treshold_p=0.1):
     p = profile_pinf_p_bar[mask]
 
 
-    # plt.plot(y, U, label='U')
-    # plt.plot(y, up2, label='U_p2')
-    # plt.plot(y, p, label='p_inf_p')
-    # plt.xlabel('y (mm)')
-    # plt.ylabel('Values')
-    # plt.title('Profiles after clipping')
-    # plt.legend()
-    # plt.grid()
-    # plt.show()
+    plt.plot(y, U, label='U')
+    plt.plot(y, up2, label='U_p2')
+    plt.plot(y, p, label='p_inf_p')
+    plt.xlabel('y (mm)')
+    plt.ylabel('Values')
+    plt.title('Profiles after clipping')
+    plt.legend()
+    plt.grid()
+    # plt.savefig('profiles_clipped.png')
+    plt.show()
 
     return U, up2, p, y
 
@@ -224,18 +225,18 @@ angles_potential_flow = np.linspace(0, 90, 100)
 Cp_potential_flow = get_Cp_potential_flow(angles_potential_flow)
 angles_potential_flow += stagnation_angle
 
-# plt.errorbar(angles, Cp, yerr=Cp_error, fmt='o', label='Data with error bars')
-# plt.plot(angles_inter, Cp_inter, label='Interpolation')
-# plt.plot(angles_potential_flow, Cp_potential_flow, label='Potential Flow')
-# plt.axvline(stagnation_angle, color='g', linestyle='--', label=f'Stagnation Point at {stagnation_angle:.2f}°')
+plt.errorbar(angles, Cp, yerr=Cp_error, fmt='o', label='Data with error bars')
+plt.plot(angles_inter, Cp_inter, label='Interpolation')
+plt.plot(angles_potential_flow, Cp_potential_flow, label='Potential Flow')
+plt.axvline(stagnation_angle, color='g', linestyle='--', label=f'Stagnation Point at {stagnation_angle:.2f}°')
 
-# # plt.axhline(1, color='r', linestyle='--', label='Cp = 1')
-# plt.xlabel('Angle (degrees)')
-# plt.ylabel('Cp')
-# plt.title('Cp vs Angle with Interpolation')
-# plt.legend()
-# plt.grid()
-# plt.show()
+# plt.axhline(1, color='r', linestyle='--', label='Cp = 1')
+plt.xlabel('Angle (degrees)')
+plt.ylabel('Cp')
+plt.title('Cp vs Angle with Interpolation')
+plt.legend()
+plt.grid()
+plt.show()
 
 
 
