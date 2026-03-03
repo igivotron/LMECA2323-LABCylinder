@@ -63,6 +63,7 @@ def get_kinematic_viscosity(T):
 
     dmu_dT = 1.458e-6  * ((1.5 * T**0.5 * (T + 110.4) - T**1.5)/ (T + 110.4)**2)
     error_mu = abs(dmu_dT) * error_T
+    #return 1e-12, 0.0
     return mu, error_mu
 
 def get_ReD(U, error_U, D, mu, error_mu, rho, error_rho):
@@ -128,6 +129,9 @@ p[0], p_err[0] : inflow avant le cylindre
 """
 datas = []
 for i in range(1, 33):
+    if i == 26 : 
+        continue
+        print(1)
     data = pd.read_csv(f'data/data{i}.csv', header=None)
     pressures = data.iloc[:, 2].values
     p_mean, error = get_pressure(pressures)
@@ -150,7 +154,7 @@ Cd, Cd_error = get_Cd(DragForce, DragForce_error, rho, error_rho, freestream_vel
 
 # TODO: Il y a une double mesure quelque part, il faudrait vérifier laquelle est la bonne et supprimer l'autre
 angles1 = np.arange(-10, 95, 5)
-angles2 = np.arange(90, 190, 10)
+angles2 = np.arange(100, 190, 10)
 angles = np.concatenate((angles1, angles2))
 
 Cp = []
@@ -162,9 +166,74 @@ for i in range(1, N):
     Cp.append(Cp_i)
     Cp_error.append(error_Cp_i)
 
-# plt.plot(angles, Cp, label='Cp')
-# plt.show()
 
+# --- Stagnation point (quadratic fit on small angles) ---
+angles_fit = angles[:8]
+Cp_fit = Cp[:8]
+
+a, b, c = np.polyfit(angles_fit, Cp_fit, 2)
+theta_stagnation = -b / (2 * a)
+print(f"Angle de stagnation : {theta_stagnation:.2f}°")
+
+theta_fit = np.linspace(angles_fit[0], angles_fit[-1], 200)
+Cp_fit_curve = a * theta_fit**2 + b * theta_fit + c
+
+plt.figure()
+plt.plot(theta_fit, Cp_fit_curve, label='Fit 2nd degree')
+plt.plot(angles, Cp, 'o', label='Cp')
+plt.axvline(theta_stagnation, linestyle='--', label='Stagnation point')
+plt.legend()
+plt.show()
+
+# --- Center angles ---
+angles_centered = angles - theta_stagnation
+
+# --- Cp centered + potential flow theory ---
+theta_theory = np.linspace(-10, 190, 400)
+theta_theory_centered = theta_theory - theta_stagnation
+Cp_theory = 1 - 4 * np.sin(np.radians(theta_theory_centered))**2
+
+plt.figure()
+plt.plot(angles_centered, Cp, 'o', label='Cp')
+plt.plot(theta_theory_centered, Cp_theory, label='Potential flow theory')
+plt.legend()
+plt.show()
+
+# --- Raw pressures (for ±2σ dispersion) ---
+pressures_raw_list = []
+for i in range(1, 33):
+    if i == 26:
+        continue
+    data = pd.read_csv(f'data/data{i}.csv', header=None)
+    pressures_raw_list.append(data.iloc[:, 2].values)
+
+Cp_std = []
+for pressures in pressures_raw_list[1:]:  # remove inflow
+    p_std = np.std(pressures)
+    Cp_std.append((2 * p_std) / (0.5 * rho * freestream_velocity**2))
+Cp_std = np.array(Cp_std)
+
+# --- Cp with combined uncertainty + ±2σ band ---
+plt.figure()
+plt.plot(angles_centered, Cp, 'o')
+
+plt.errorbar(
+    angles_centered, Cp,
+    yerr=np.abs(Cp_error),
+    fmt='none', capsize=3,
+    label='Cp ± combined uncertainty'
+)
+
+plt.fill_between(
+    angles_centered,
+    np.array(Cp) - Cp_std,
+    np.array(Cp) + Cp_std,
+    alpha=0.3,
+    label='Cp ± 2σ'
+)
+
+plt.legend()
+plt.show()
 
 ### Additional Analysis
 Drag = get_D(rho, freestream_velocity, profile_U_bar, profile_U_p2_bar, profile_pinf_p_bar, profile_y)
