@@ -4,8 +4,6 @@ import numpy as np
 import scipy as sp
 
 
-
-
 ambiant_p = np.load("CylindersWake-20260225/ambient_p.npy")
 ambiant_T = np.load("CylindersWake-20260225/ambient_T.npy")
 inflow_delta_p = pd.read_csv("CylindersWake-20260225/inflow_delta_p.CSV", header=None)
@@ -56,7 +54,7 @@ def get_freestream_velocity(pressure, error_pressure, rho, error_rho):
     U_error = U * np.sqrt((error_pressure / pressure)**2 + (error_rho / rho)**2)
     return U, U_error
 
-def get_kinematic_viscosity(T):
+def get_dynamic_viscosity(T):
     # Sutherland's formula for air viscosity
     error_T = 1/2
     mu = 1.458e-6 * T**(3/2) / (T + 110.4)
@@ -137,13 +135,24 @@ def get_max_pressure_angle(coeffs):
     a, b, c = coeffs
     return -b / (2 * a)
 
-def integral_cptheta(angles, Cp):
-    angles_rad = np.radians(angles)
-    return np.trapezoid(Cp * np.cos(angles_rad), angles_rad)
+def integral_cptheta(angles, Cp, calage):
+    # angles = angles - calage
+    index_0_180 =  np.where((angles >= 0) & (angles <= 180))[0]
+    angles_0_180 = angles[index_0_180]
+    angles_0_180_rad = np.radians(angles_0_180)
+    cp_0_180 = Cp[index_0_180]
+
+    angles360 = np.concatenate((-angles_0_180_rad[::-1], angles_0_180_rad))
+    cp360 = np.concatenate((cp_0_180[::-1], cp_0_180))
+
+    angles360 = angles360[:-1]
+    cp360 = cp360[:-1]
+
+    if np.__version__ >= '2.0.0': return 0.5 * np.trapezoid(cp360 * np.cos(angles360), angles360)
+    return 0.5 * np.trapz(cp360 * np.cos(angles360), angles360)
 
 def get_Cp_potential_flow(theta):
     return 1 - 4 * np.sin(np.radians(theta))**2
-
 
 def clip_additional_data(U_inf, treshold_U=0.1, treshold_p=0.1):
     """
@@ -196,7 +205,7 @@ N = len(p)
 rho, error_rho = get_rho()
 freestream_pressure, freestram_pressure_error = p[0], p_err[0]
 freestream_velocity, freestream_velocity_error = get_freestream_velocity(freestream_pressure, freestram_pressure_error, rho, error_rho)
-mu, error_mu = get_kinematic_viscosity(ambiant_T)
+mu, error_mu = get_dynamic_viscosity(ambiant_T)
 ReD, error_ReD = get_ReD(freestream_velocity, freestream_velocity_error, D, mu, error_mu, rho, error_rho)
 DragForce_straingauge, DragForce_straingauge_error = tension_to_force(strainTension)
 Cd_straingauge, Cd_straingauge_error = get_Cd_straingauge(DragForce_straingauge, DragForce_straingauge_error, rho, error_rho, freestream_velocity, freestream_velocity_error, D)
@@ -214,12 +223,15 @@ for i in range(1, N):
     Cp.append(Cp_i)
     Cp_error.append(error_Cp_i)
 
+Cp = np.array(Cp)
+Cp_error = np.array(Cp_error)
+
 # interpolation du Cp pour trouver le point de stagnation
 coefs = get_p_interpolation_coefficients(angles, p)
 angles_inter = np.linspace(-10, 10, 100)
 Cp_inter = interpolate_Cp(coefs, angles_inter)
 stagnation_angle = get_max_pressure_angle(coefs)
-Cp_total = integral_cptheta(angles, Cp)
+Cp_total = integral_cptheta(angles, Cp, stagnation_angle)
 
 angles_potential_flow = np.linspace(0, 90, 100)
 Cp_potential_flow = get_Cp_potential_flow(angles_potential_flow)
@@ -251,7 +263,7 @@ Cd_additional = Drag_add / (0.5 * rho * freestream_velocity**2 * D)
 print(f"Rho : {rho:.6f} ± {error_rho:.6f} kg/m³")
 print(f"Freestream Pressure : {freestream_pressure:.6f} ± {freestram_pressure_error:.6f} Pa")
 print(f"Freestream Velocity : {freestream_velocity:.6f} ± {freestream_velocity_error:.6f} m/s")
-print(f"Kinematic Viscosity : {mu:.6e} ± {error_mu:.6e} m²/s")
+print(f"Dynamic Viscosity : {mu:.6e} ± {error_mu:.6e} m²/s")
 print(f"Reynolds Number : {ReD:.6e} ± {error_ReD:.6e}")
 print(f"Drag Force from the Strain gauge: {DragForce_straingauge:.6f} ± {DragForce_straingauge_error:.6f} N")
 print(f"Drag Coefficient from the strain gauge: {Cd_straingauge:.6f} ± {Cd_straingauge_error:.6f}")
