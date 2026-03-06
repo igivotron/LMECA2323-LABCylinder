@@ -15,6 +15,7 @@ profile_y = np.load("CylindersWake-20260225/profile_y.npy")
 strain_calibration = pd.read_csv('data/strain_calibration.csv', delimiter=';', header=0)
 mutlimeter = pd.read_csv('data/multimeter.csv', delimiter=';', header=None)
 strainTension = mutlimeter.iloc[:, 0].values
+Cd_mounting = 0.09
 
 R = 287.05
 D = 50e-3
@@ -88,13 +89,19 @@ def tension_to_force(tension):
     error_random = z * tension_std / np.sqrt(N)
     error_reading = 0.01 /2 
 
+    # error_tension = np.sqrt(error_random**2 + error_reading**2)
+    # print(f"Tension mean: {tension_mean:.6f} V, Error: {error_tension:.6f} V")
+
     a, b = strain_interpolation_coefs()
     force = (tension_mean - b) / a
     error_force = np.sqrt((error_random / a)**2 + (error_reading / a)**2) # Plus l'erreur de la calibration, mais on suppose que c'est négligeable
+    print(f"Force: {force:.6f} N, Error: {error_force:.6f} N")
     return force, error_force
 
 def get_Cd_straingauge(DragForce, DragForce_error, rho, error_rho, U, error_U, D):
-    Cd = DragForce / (0.5 * rho * U**2 * D * b)
+    Cd = DragForce / (0.5 * rho * U**2 * D * b) - Cd_mounting
+    print(f"Surface de référence : {D * b:.6f} m²")
+
     error_Cd = Cd * np.sqrt((error_rho / rho)**2 + (2 * error_U / U)**2 + (DragForce_error / DragForce)**2)
     return Cd, error_Cd
 
