@@ -172,15 +172,15 @@ def clip_additional_data(U_inf, treshold_U=0.1, treshold_p=0.1):
     # for i in index: plt.axvline(profile_y[i], color='r', linestyle='--', label=f'Clipping at y={profile_y[i]:.2f} mm')
 
     mask = (profile_y >= profile_y[low_bound]) & (profile_y <= profile_y[upper_bound])
-    y = profile_y[mask]
-    U = profile_U_bar[mask]
-    up2 = profile_U_p2_bar[mask]
-    p = profile_pinf_p_bar[mask]
+    y_add = profile_y[mask]
+    U_add = profile_U_bar[mask]
+    up2_add = profile_U_p2_bar[mask]
+    p_add = profile_pinf_p_bar[mask]
 
 
-    plt.plot(y, U, label='U')
-    plt.plot(y, up2, label='U_p2')
-    plt.plot(y, p, label='p_inf_p')
+    plt.plot(y_add, U_add, label='U')
+    plt.plot(y_add, up2_add, label='U_p2')
+    plt.plot(y_add, p_add, label='p_inf_p')
     plt.xlabel('y (mm)')
     plt.ylabel('Values')
     plt.title('Profiles after clipping')
@@ -189,7 +189,7 @@ def clip_additional_data(U_inf, treshold_U=0.1, treshold_p=0.1):
     # plt.savefig('profiles_clipped.png')
     plt.show()
 
-    return U, up2, p, y
+    return U_add, up2_add, p_add, y_add
 
 """
 Mise en forme des données
