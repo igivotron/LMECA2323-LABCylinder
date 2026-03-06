@@ -135,21 +135,29 @@ def get_max_pressure_angle(coeffs):
     a, b, c = coeffs
     return -b / (2 * a)
 
-def integral_cptheta(angles, Cp, calage):
-    # angles = angles - calage
-    index_0_180 =  np.where((angles >= 0) & (angles <= 180))[0]
-    angles_0_180 = angles[index_0_180]
-    angles_0_180_rad = np.radians(angles_0_180)
-    cp_0_180 = Cp[index_0_180]
 
-    angles360 = np.concatenate((-angles_0_180_rad[::-1], angles_0_180_rad))
-    cp360 = np.concatenate((cp_0_180[::-1], cp_0_180))
+def integral_cptheta(angles, Cp, calage, extrapolate=True):
+    if extrapolate:
+        angles_extrap_gauche = np.linspace(-10, 10, 100)
+        coefs_gauche = np.polyfit(angles[0:5], Cp[0:5], 2)
+        Cp_extrap_gauche = np.polyval(coefs_gauche, angles_extrap_gauche)
 
-    angles360 = angles360[:-1]
-    cp360 = cp360[:-1]
+        angles_extrap_droite = np.linspace(140, 200, 100)
+        coefs_droite = np.polyfit(angles[-5:], Cp[-5:], 2)
+        Cp_extrap_droite = np.polyval(coefs_droite, angles_extrap_droite)
 
-    if np.__version__ >= '2.0.0': return 0.5 * np.trapezoid(cp360 * np.cos(angles360), angles360)
-    return 0.5 * np.trapz(cp360 * np.cos(angles360), angles360)
+        angles = np.concatenate((angles_extrap_gauche, angles[5:-5], angles_extrap_droite))
+        Cp = np.concatenate((Cp_extrap_gauche, Cp[5:-5], Cp_extrap_droite))
+    
+    angles -= calage
+    index = np.where((angles >= 0) & (angles <= 180))[0]
+    angles180 = angles[index]
+    Cp180 = Cp[index]
+
+    angles_rad = np.radians(angles180)
+    
+    if np.__version__ >= '2.0.0': return np.trapezoid(Cp180 * np.cos(angles_rad), angles_rad)
+    return np.trapezoid(Cp180 * np.cos(angles_rad), angles_rad)
 
 def get_Cp_potential_flow(theta):
     return 1 - 4 * np.sin(np.radians(theta))**2
